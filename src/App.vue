@@ -12,7 +12,7 @@
         <el-table :data="serversData" border>
           <el-table-column prop="name" label="服务名称" width="240">
           </el-table-column>
-          <el-table-column  label="JSON接口URL">
+          <el-table-column  label="接口URL">
             <template slot-scope="scope">
               <a target="_blank" :href="scope.row.url">{{ scope.row.url }}</a>
             </template>
@@ -22,9 +22,10 @@
               <a target="_blank" :href="backendEndpoint + '/exporter/metrics?serverId=' + scope.row.id">{{ backendEndpoint }}/exporter/metrics?serverId={{ scope.row.id }}</a>
             </template>
           </el-table-column>
-          <el-table-column label="操作" fixed="right" width="180">
+          <el-table-column label="操作" fixed="right" width="280">
             <template slot-scope="scope">
-              <el-button @click="serverViewClick(scope.row)" type="text" size="small">查看</el-button>
+              <el-button @click="preprocessViewClick(scope.row)" type="text" size="small">查看预处理</el-button>
+              <el-button @click="serverViewClick(scope.row)" type="text" size="small">查看指标</el-button>
               <el-button @click="serverEditClick(scope.row)" type="text" size="small">编辑</el-button>
               <el-button @click="serverDelClick(scope.row)" type="text" size="small">删除</el-button>
             </template>
@@ -43,6 +44,17 @@
           <el-form-item label="URL">
             <el-input v-model="newServerFormData.url"></el-input>
           </el-form-item>
+          <div class="preprocesses" style="margin-left: 50px;">
+            <div>数据预处理</div>
+            <div v-for="(preprocess, index) in newServerFormData.preprocesses" style="border-style: solid;">
+              <el-form-item label="类型">
+                <el-select v-model="preprocess.name" placeholder="请选择预处理类型">
+                  <el-option label="xml转json" value="xmlconvert"></el-option>
+                </el-select>
+              </el-form-item>
+              <el-button @click.prevent="removePreprocessAtNewServerForm(preprocess)">删除预处理步骤</el-button>
+            </div>
+          </div>
           <div class="metrics" style="margin-left: 50px;">
             <div>Metrics</div>
             <div v-for="(metric, index) in newServerFormData.metrics" style="border-style: solid;">
@@ -102,6 +114,7 @@
           </div>
         </el-form>
         <div slot="footer" class="dialog-footer">
+          <el-button @click="addPreprocessClick">新增预处理步骤</el-button>
           <el-button @click="addServerMetricClick">新增Metric</el-button>
           <el-button @click="newServerFormCancel">取 消</el-button>
           <el-button type="primary" @click="newServerFormSubmit">确 定</el-button>
@@ -119,6 +132,17 @@
           <el-form-item label="URL">
             <el-input v-model="editServerFormData.url"></el-input>
           </el-form-item>
+          <div class="preprocesses" style="margin-left: 50px;">
+            <div>数据预处理</div>
+            <div v-for="(preprocess, index) in editServerFormData.preprocesses" style="border-style: solid;">
+              <el-form-item label="类型">
+                <el-select v-model="preprocess.name" placeholder="请选择预处理类型">
+                  <el-option label="xml转json" value="xmlconvert"></el-option>
+                </el-select>
+              </el-form-item>
+              <el-button @click.prevent="removePreprocessAtEditServerForm(preprocess)">删除预处理步骤</el-button>
+            </div>
+          </div>
           <div class="metrics" style="margin-left: 50px;">
             <div>Metrics</div>
             <div v-for="(metric, index) in editServerFormData.metrics" style="border-style: solid;">
@@ -171,9 +195,35 @@
           </div>
         </el-form>
         <div slot="footer" class="dialog-footer">
+          <el-button @click="addPreprocessAtEditServerFormClick">新增预处理步骤</el-button>
           <el-button @click="addServerMetricAtEditServerFormClick">新增Metric</el-button>
           <el-button @click="editServerFormCancel">取 消</el-button>
           <el-button type="primary" @click="editServerFormSubmit">确 定</el-button>
+        </div>
+      </el-dialog>
+    </div>
+
+    <!-- 查看预处理表单 -->
+    <div>
+      <el-dialog title="预处理步骤" :visible.sync="preprocessDialogVisible" center>
+        <el-collapse v-for="(preprocess, index) in preprocessDialogData">
+          <el-collapse-item :title="preprocess.name" :name="index">
+            <div>
+              <el-descriptions class="margin-top" :column="1" size="medium" border>
+                <el-descriptions-item>
+                  <template slot="label">
+                    <i class="el-icon-location-outline"></i>
+                    步骤
+                  </template>
+                  {{ preprocess.name }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+        <div slot="footer" class="dialog-footer">
+          <el-button @click="preprocessDialogVisible = false">取 消</el-button>
+          <el-button type="primary" @click="preprocessDialogVisible = false">确 定</el-button>
         </div>
       </el-dialog>
     </div>
@@ -249,16 +299,21 @@ export default {
   data() {
     return {
       backendEndpoint: '/backend',
+      // backendEndpoint: 'http://localhost:8080',
       JSONPathEvaluatorEndpoint: '/jsonpath/index.html',
       newServerDialogVisible: false,
       newServerFormData: {
+        preprocesses: [],
         metrics: [],
       },
+      preprocessDialogVisible: false,
+      preprocessDialogData: [],
       metricsDialogVisible: false,
       metricsDialogData: [],
       serversData: [],
       editServerDialogVisible: false,
       editServerFormData: {
+        preprocesses: [],
         metrics: [],
       }
     }
@@ -276,6 +331,16 @@ export default {
     // 新增表单方法 //
     serverAddClick() {
       this.newServerDialogVisible = true;
+    },
+    addPreprocessClick() {
+      this.newServerFormData.preprocesses.push({name: 'xmlconvert'});
+      this.$forceUpdate();
+    },
+    removePreprocessAtNewServerForm(item) {
+      let index = this.newServerFormData.preprocesses.indexOf(item);
+      if (index !== -1){
+        this.newServerFormData.preprocesses.splice(index, 1);
+      }
     },
     addServerMetricClick() {
       this.newServerFormData.metrics.push({type: "value", labels: [], values: []});
@@ -358,6 +423,16 @@ export default {
       this.editServerFormData = server;
       this.editServerDialogVisible = true;
     },
+    addPreprocessAtEditServerFormClick() {
+      this.editServerFormData.preprocesses.push({name: "xmlconvert"});
+      this.$forceUpdate();
+    },
+    removePreprocessAtEditServerForm(item) {
+      let index = this.editServerFormData.preprocesses.indexOf(item);
+      if (index !== -1) {
+        this.editServerFormData.preprocesses.splice(index, 1);
+      }
+    },
     addServerMetricAtEditServerFormClick() {
       this.editServerFormData.metrics.push({type: "value", labels: [], values: []});
       this.$forceUpdate();
@@ -435,6 +510,10 @@ export default {
       this.editServerFormData = {metrics: []};
     },
     // 查看方法 //
+    preprocessViewClick(server) {
+      this.preprocessDialogData = server.preprocesses;
+      this.preprocessDialogVisible = true;
+    },
     serverViewClick(server) {
       this.metricsDialogData = server.metrics;
       this.metricsDialogVisible = true;
