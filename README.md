@@ -1,4 +1,8 @@
-# json_exporter_frontend
+# DEPRECATED
+
+This project code has been moved into [json_exporter](https://github.com/zhengtianbao/json_exporter).
+
+## Description
 
 [json_exporter](https://github.com/zhengtianbao/json_exporter) 前端页面
 
